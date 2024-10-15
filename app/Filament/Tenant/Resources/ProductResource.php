@@ -27,6 +27,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Laravel\Pennant\Feature;
 
 class ProductResource extends Resource
@@ -35,7 +36,28 @@ class ProductResource extends Resource
 
     protected static ?string $model = Product::class;
 
+    protected static ?string $recordTitleAttribute = 'name';
+
     protected static ?string $navigationIcon = 'heroicon-o-archive-box';
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'sku', 'barcode'];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return [
+            __('Name') => $record->name,
+            __('Sku') => $record->sku,
+            __('Stock') => $record->stock,
+        ];
+    }
+
+    public static function getGlobalSearchResultUrl(Model $record): string
+    {
+        return ProductResource::getUrl('view', ['record' => $record]);
+    }
 
     public static function table(Table $table): Table
     {
@@ -47,19 +69,28 @@ class ProductResource extends Resource
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('category.name')
+                    ->toggleable()
                     ->translateLabel()
                     ->searchable(),
                 TextColumn::make('name')
                     ->translateLabel()
                     ->searchable(),
                 TextColumn::make('sku')
-                    ->visible(Feature::active(ProductSku::class))
+                    ->searchable()
+                    ->toggleable()
+                    ->visible(Feature::active(ProductSku::class)),
+                TextColumn::make('barcode')
+                    ->hidden()
+                    ->searchable()
+                    ->toggleable()
                     ->translateLabel(),
                 TextColumn::make('stock')
+                    ->toggleable()
                     ->translateLabel()
                     ->visible(Feature::active(ProductStock::class))
                     ->sortable(),
                 TextColumn::make('unit')
+                    ->toggleable()
                     ->translateLabel(),
                 TextColumn::make('initial_price')
                     ->visible(Feature::active(ProductInitialPrice::class))
@@ -79,6 +110,7 @@ class ProductResource extends Resource
                     ->visible(Feature::active(ProductType::class))
                     ->translateLabel(),
                 ToggleColumn::make('is_non_stock')
+                    ->toggleable()
                     ->visible(Feature::active(ProductStock::class))
                     ->translateLabel(),
             ])
@@ -106,6 +138,7 @@ class ProductResource extends Resource
                         ->url(fn (Product $record) => static::getUrl('print-label', ['record' => $record])),
                     Tables\Actions\DeleteAction::make(),
                     Tables\Actions\RestoreAction::make(),
+                    Tables\Actions\ForceDeleteAction::make(),
                 ])
                     ->icon('heroicon-m-ellipsis-vertical')
                     ->size(ActionSize::Small)
