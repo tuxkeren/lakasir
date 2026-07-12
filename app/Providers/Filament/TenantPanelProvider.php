@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Features\Member;
 use App\Features\PaymentMethod;
 use App\Features\Permission;
+use App\Features\PosV2;
 use App\Features\Purchasing;
 use App\Features\Receivable;
 use App\Features\Role;
@@ -12,9 +13,11 @@ use App\Features\StockOpname;
 use App\Features\Supplier;
 use App\Features\User;
 use App\Features\Voucher;
+use App\Filament\Tenant\Pages\CartItem;
 use App\Filament\Tenant\Pages\Cashier;
 use App\Filament\Tenant\Pages\CashierReport;
 use App\Filament\Tenant\Pages\GeneralSetting;
+use App\Filament\Tenant\Pages\POS;
 use App\Filament\Tenant\Pages\Printer;
 use App\Filament\Tenant\Pages\ProductReport;
 use App\Filament\Tenant\Pages\PurchasingReport;
@@ -38,6 +41,7 @@ use App\Filament\Tenant\Resources\VoucherResource;
 use App\Http\Middleware\LocalizationMiddleware;
 use App\Models\Tenants\About;
 use App\Tenant;
+use Filament\Forms\Components\DatePicker;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -51,20 +55,35 @@ use Filament\PanelProvider;
 use Filament\Resources\Resource;
 use Filament\Support\Assets\Js;
 use Filament\Support\Colors\Color;
+use Filament\Support\Facades\FilamentView;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Illuminate\View\View;
 use Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper;
 
 class TenantPanelProvider extends PanelProvider
 {
+    public function register(): void
+    {
+        parent::register();
+        DatePicker::configureUsing(function (DatePicker $datePicker): void {
+            $datePicker
+                ->closeOnDateSelection()
+                ->native(false);
+        });
+
+    }
+
     public function panel(Panel $panel): Panel
     {
         $panel = $this->configurePanel($panel);
@@ -74,6 +93,25 @@ class TenantPanelProvider extends PanelProvider
             $this->initializeTenantPanel($panel, $url);
         } else {
             $this->initializeDefaultPanel($panel);
+        }
+
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn () => view('meta')
+        );
+
+        if (app()->environment('demo')) {
+            $arraySupport = [
+                'https://saweria.co/sheenazien',
+                'https://trakteer.id/sheenazien8/tip',
+                'https://buymeacoffee.com/sheenazien8',
+            ];
+            FilamentView::registerRenderHook(
+                PanelsRenderHook::BODY_START,
+                fn (): View => view('donation-banner', [
+                    'link' => Arr::random($arraySupport),
+                ]),
+            );
         }
 
         return $panel;
@@ -92,6 +130,7 @@ class TenantPanelProvider extends PanelProvider
             ->assets([
                 Js::make('custom-javascript', resource_path('js/app.js')),
                 Js::make('printer', resource_path('js/printer.js')),
+                Js::make('indexeddb', resource_path('js/indexeddb.js')),
             ])
             ->favicon(url('favicon.ico'))
             ->spa(config('app.spa_mode'))
@@ -103,7 +142,10 @@ class TenantPanelProvider extends PanelProvider
             ->discoverPages(in: app_path('Filament/Tenant/Pages'), for: 'App\\Filament\\Tenant\\Pages')
             ->discoverWidgets(in: app_path('Filament/Tenant/Widgets'), for: 'App\\Filament\\Tenant\\Widgets')
             ->middleware($this->getMiddleware())
-            ->authMiddleware([Authenticate::class]);
+            ->authMiddleware([Authenticate::class])
+            ->pages([
+                CartItem::class,
+            ]);
 
         return $panel;
     }
@@ -120,6 +162,7 @@ class TenantPanelProvider extends PanelProvider
         return [
             ...Pages\Dashboard::getNavigationItems(),
             $this->generateNavigationItem(Cashier::class),
+            $this->generateNavigationItem(POS::class, PosV2::class),
             $this->generateNavigationItem(SellingResource::class),
             $this->generateNavigationItem(SupplierResource::class, Supplier::class),
             $this->generateNavigationItem(MemberResource::class, Member::class),
